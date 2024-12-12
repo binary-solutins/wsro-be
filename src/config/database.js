@@ -13,13 +13,17 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 90000, // Increased to 90 seconds
-  acquireTimeout: 90000,
-  socketPath: undefined, // Remove any socket path configurations
+  connectTimeout: 60000, // Increased timeout to 60 seconds
+  acquireTimeout: 60000,
+  timeout: 60000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   ssl: {
-    // If your hosting requires SSL
-    rejectUnauthorized: false
-  }
+    rejectUnauthorized: false // Changed to false to work with self-signed certificates
+  },
+  // Add retry strategy
+  maxRetries: 3,
+  retryDelay: 3000
 });
 
 const promisePool = pool.promise();
