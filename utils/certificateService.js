@@ -1,4 +1,4 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
+const PDFDocument = require('pdfkit');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs').promises;
@@ -17,7 +17,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-
 async function generateCertificate(participantData) {
   const {
     name,
@@ -27,64 +26,74 @@ async function generateCertificate(participantData) {
     certificateId
   } = participantData;
 
-  // Create canvas
-  const width = 1920;
-  const height = 1080;
-  const canvas = createCanvas(width, height);
-  const context = canvas.getContext('2d');
-
-  // Set background
-  context.fillStyle = '#FFFFFF';
-  context.fillRect(0, 0, width, height);
-
-  // Add border
-  context.strokeStyle = '#4F46E5';
-  context.lineWidth = 20;
-  context.strokeRect(40, 40, width - 80, height - 80);
-
-  // Add inner border
-  context.strokeStyle = '#4F46E5';
-  context.lineWidth = 2;
-  context.strokeRect(60, 60, width - 120, height - 120);
-
-  // Add certificate title
- 
-  context.fillStyle = '#4F46E5';
-  context.textAlign = 'center';
-  context.fillText('Certificate of Achievement', width / 2, 200);
-
-  // Add participant name
-
-  context.fillStyle = '#000000';
-  context.fillText(name, width / 2, height / 2 - 50);
-
-  // Add competition details
- 
-  context.fillText(`for successfully participating in`, width / 2, height / 2 + 30);
-
-  context.fillText(competitionName, width / 2, height / 2 + 100);
-
-  // Add position if provided
-  if (position) {
-    context.fillText(`Securing ${position} Position`, width / 2, height / 2 + 170);
-  }
-
-  // Add date
- 
-  context.fillText(`Date: ${date}`, width / 2, height - 200);
-
-  // Add certificate ID
-  
-  context.fillText(`Certificate ID: ${certificateId}`, width / 2, height - 150);
-
   // Create uploads directory if it doesn't exist
   const uploadsDir = path.join(__dirname, 'uploads');
   await fs.mkdir(uploadsDir, { recursive: true });
 
-  // Save certificate
-  const certificatePath = path.join(uploadsDir, `certificate-${certificateId}.png`);
-  const buffer = canvas.toBuffer('image/png');
-  await fs.writeFile(certificatePath, buffer);
+  // Create certificate PDF
+  const certificatePath = path.join(uploadsDir, `certificate-${certificateId}.pdf`);
+  const doc = new PDFDocument({
+    size: 'A4',
+    layout: 'landscape'
+  });
+
+  // Pipe PDF to file
+  const writeStream = fs.createWriteStream(certificatePath);
+  doc.pipe(writeStream);
+
+  // Set up PDF styling
+  doc.fontSize(24)
+     .font('Helvetica-Bold')
+     .fillColor('#4F46E5')
+     .text('Certificate of Achievement', { 
+       align: 'center', 
+       underline: true 
+     });
+
+  // Add border
+  doc.lineWidth(2)
+     .strokeColor('#4F46E5')
+     .rect(50, 50, doc.page.width - 100, doc.page.height - 100)
+     .stroke();
+
+  // Participant details
+  doc.fontSize(36)
+     .font('Helvetica')
+     .fillColor('black')
+     .text(name, { 
+       align: 'center',
+       moveDown: 2
+     });
+
+  doc.fontSize(18)
+     .text('for successfully participating in', { align: 'center' })
+     .fontSize(24)
+     .fillColor('#4F46E5')
+     .text(competitionName, { align: 'center' });
+
+  // Add position if provided
+  if (position) {
+    doc.fontSize(18)
+       .fillColor('black')
+       .text(`Securing ${position} Position`, { align: 'center' });
+  }
+
+  // Add date and certificate ID
+  doc.fontSize(12)
+     .text(`Date: ${date}`, { 
+       align: 'center', 
+       moveDown: 2 
+     })
+     .text(`Certificate ID: ${certificateId}`, { align: 'center' });
+
+  // Finalize PDF
+  doc.end();
+
+  // Wait for write stream to finish
+  await new Promise((resolve, reject) => {
+    writeStream.on('finish', resolve);
+    writeStream.on('error', reject);
+  });
 
   return certificatePath;
 }
@@ -127,7 +136,7 @@ async function sendCertificateEmail(emailData) {
     `,
     attachments: [
       {
-        filename: `${name}-Certificate.png`,
+        filename: `${name}-Certificate.pdf`,
         path: certificatePath
       }
     ]
